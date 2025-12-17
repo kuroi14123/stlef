@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D ストレイフゲーム（CS風物理）</title>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #000; }
+    #info {
+      cursor: default;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: #0f0;
+      font-family: monospace;
+      font-size: 14px;
+      background: rgba(0,0,0,0.5);
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+<div id="info">
+  WASD：移動 / マウス：視点 / Space：ジャンプ<br>
+  CS風：加速・減速・空中制御（簡易）
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+// =====================
+// 基本セットアップ
+// =====================
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x000000, 5, 200);
+
+const camera = new THREE.PerspectiveCamera(
+  75,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// =====================
+// ライト
+// =====================
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(5, 10, 5);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x404040));
+
+// =====================
+// 床（オープンワールド）
+// =====================
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(2000, 2000, 50, 50),
+  new THREE.MeshStandardMaterial({ color: 0x222222 })
+);
+floor.rotation.x = -Math.PI / 2;
+scene.add(floor);
+
+// =====================
+// 障害物
+// =====================
+for (let i = 0; i < 80; i++) {
+  const box = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1 + Math.random() * 2, 1),
+    new THREE.MeshStandardMaterial({ color: 0x00ffcc })
+  );
+  box.position.set(
+    (Math.random() - 0.5) * 300,
+    box.geometry.parameters.height / 2,
+    (Math.random() - 0.5) * 300
+  );
+  scene.add(box);
+}
+
+// =====================
+// プレイヤー（CS風物理）
+// =====================
+const player = {
+  position: new THREE.Vector3(0, 1.6, 5),
+  velocity: new THREE.Vector3(),
+  onGround: false
+};
+
+camera.position.copy(player.position);
+
+// =====================
+// 入力管理
+// =====================
+const keys = {};
+document.addEventListener('keydown', e => keys[e.code] = true);
+document.addEventListener('keyup', e => keys[e.code] = false);
+
+// =====================
+// 視点角度（CS風）
+// =====================
+let yaw = 0;           // 水平角（無制限）
+let pitch = 0;         // 垂直角
+
+const mouseSensitivity = 0.0025; // CSっぽい感度
+const maxPitch = THREE.MathUtils.degToRad(89);
+
+// ポインタロック（canvasに対して行う）
+renderer.domElement.addEventListener('click', () => {
+  renderer.domElement.requestPointerLock();
+});
+});
+
+document.addEventListener('mousemove', e => {
+  if (document.pointerLockElement === renderer.domElement) {
+    yaw -= e.movementX * mouseSensitivity;
+    pitch -= e.movementY * mouseSensitivity;
+
+    // CS風 pitch 制限（ほぼ真上・真下まで）
+    pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
+  }
+});
+  }
+});
+  }
+});
+
+// =====================
+// 物理パラメータ（CS風）
+// =====================
+const accel = 25;
+const airAccel = 8;
+const maxSpeed = 7;
+const friction = 12;
+const gravity = 30;
+const jumpPower = 9;
+
+let lastTime = performance.now();
+
+function animate(time) {
+  requestAnimationFrame(animate);
+
+  const delta = Math.min(0.05, (time - lastTime) / 1000);
+  lastTime = time;
+
+  // 視点回転
+  // CS風カメラ回転（ロールなし）
+camera.rotation.order = 'YXZ';
+camera.rotation.x = pitch;
+camera.rotation.y = yaw;
+camera.rotation.z = 0;
+
+  // 入力方向
+  const wishDir = new THREE.Vector3();
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  forward.y = 0;
+  forward.normalize();
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+
+  if (keys['KeyW']) wishDir.add(forward);
+  if (keys['KeyS']) wishDir.sub(forward);
+  if (keys['KeyA']) wishDir.sub(right);
+  if (keys['KeyD']) wishDir.add(right);
+
+  if (wishDir.length() > 0) wishDir.normalize();
+
+  // 地面判定（簡易）
+  if (player.position.y <= 1.6) {
+    player.onGround = true;
+    player.position.y = 1.6;
+    player.velocity.y = Math.max(0, player.velocity.y);
+  } else {
+    player.onGround = false;
+  }
+
+  // 加速
+  const currentAccel = player.onGround ? accel : airAccel;
+  player.velocity.addScaledVector(wishDir, currentAccel * delta);
+
+  // 最大速度制限（水平）
+  const horizontalVel = new THREE.Vector3(player.velocity.x, 0, player.velocity.z);
+  if (horizontalVel.length() > maxSpeed) {
+    horizontalVel.setLength(maxSpeed);
+    player.velocity.x = horizontalVel.x;
+    player.velocity.z = horizontalVel.z;
+  }
+
+  // 摩擦
+  if (player.onGround && wishDir.length() === 0) {
+    player.velocity.x -= player.velocity.x * friction * delta;
+    player.velocity.z -= player.velocity.z * friction * delta;
+  }
+
+  // ジャンプ
+  if (keys['Space'] && player.onGround) {
+    player.velocity.y = jumpPower;
+    player.onGround = false;
+  }
+
+  // 重力
+  player.velocity.y -= gravity * delta;
+
+  // 位置更新
+  player.position.addScaledVector(player.velocity, delta);
+  camera.position.copy(player.position);
+
+  renderer.render(scene, camera);
+}
+
+animate(performance.now());
+
+// =====================
+// リサイズ対応
+// =====================
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
