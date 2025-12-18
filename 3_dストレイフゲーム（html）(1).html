@@ -96,32 +96,19 @@ const keys = {};
 document.addEventListener('keydown', e => keys[e.code] = true);
 document.addEventListener('keyup', e => keys[e.code] = false);
 
-// =====================
-// 視点角度（CS風）
-// =====================
-let yaw = 0;           // 水平角（無制限）
-let pitch = 0;         // 垂直角
-
-const mouseSensitivity = 0.0025; // CSっぽい感度
-const maxPitch = THREE.MathUtils.degToRad(89);
+let yaw = 0;
+let pitch = 0;
 
 // ポインタロック（canvasに対して行う）
 renderer.domElement.addEventListener('click', () => {
   renderer.domElement.requestPointerLock();
 });
-});
 
 document.addEventListener('mousemove', e => {
   if (document.pointerLockElement === renderer.domElement) {
-    yaw -= e.movementX * mouseSensitivity;
-    pitch -= e.movementY * mouseSensitivity;
-
-    // CS風 pitch 制限（ほぼ真上・真下まで）
-    pitch = Math.max(-maxPitch, Math.min(maxPitch, pitch));
-  }
-});
-  }
-});
+    yaw -= e.movementX * 0.002;
+    pitch -= e.movementY * 0.002;
+    pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
   }
 });
 
@@ -144,11 +131,7 @@ function animate(time) {
   lastTime = time;
 
   // 視点回転
-  // CS風カメラ回転（ロールなし）
-camera.rotation.order = 'YXZ';
-camera.rotation.x = pitch;
-camera.rotation.y = yaw;
-camera.rotation.z = 0;
+  camera.rotation.set(pitch, yaw, 0, 'YXZ');
 
   // 入力方向
   const wishDir = new THREE.Vector3();
